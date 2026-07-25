@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js';
+import { timingSafeEqual } from 'node:crypto';
 import * as z from 'zod/v4';
 import { DEFAULT_BASE_URL, DEFAULT_MCP_HOST, DEFAULT_MCP_PORT } from './config.js';
 import { importChromeCookies } from './cookies.js';
@@ -19,6 +20,12 @@ function errorResult(error: unknown) {
     error: error instanceof Error ? error.message : String(error),
     type: error instanceof Error ? error.name : 'Error',
   });
+}
+
+function authorized(header: string | undefined, token: string) {
+  const expected = Buffer.from(`Bearer ${token}`);
+  const actual = Buffer.from(header ?? '');
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 function buildServer(): McpServer {
@@ -101,6 +108,35 @@ function buildServer(): McpServer {
       try {
         const cleared = await clearSession();
         return textResult({ ok: true, cleared });
+      } catch (e) {
+        return errorResult(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'list_meetings',
+    {
+      title: 'List Zoom meetings',
+      description: 'List scheduled upcoming or previous Zoom meetings without changing them.',
+      inputSchema: {
+        list_type: z.enum(['upcoming', 'previous']).default('upcoming'),
+        page: z.number().int().min(1).default(1),
+        page_size: z.number().int().min(1).max(100).default(15),
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      },
+    },
+    async (args) => {
+      try {
+        const client = await createClient();
+        return textResult(await client.listMeetings({
+          listType: args.list_type,
+          page: args.page,
+          pageSize: args.page_size,
+          from: args.from,
+          to: args.to,
+        }));
       } catch (e) {
         return errorResult(e);
       }
@@ -250,7 +286,28 @@ export async function startHttpServer(options?: {
 }): Promise<void> {
   const host = options?.host ?? DEFAULT_MCP_HOST;
   const port = options?.port ?? DEFAULT_MCP_PORT;
+  const bridgeToken = process.env.ZOOM_MCP_BRIDGE_TOKEN;
+  if (!bridgeToken) throw new Error('ZOOM_MCP_BRIDGE_TOKEN is required when serving MCP over HTTP');
+
+  const publicMcpUrl = process.env.ZOOM_MCP_PUBLIC_URL ?? `http://${host}:${port}/mcp`;
   const app = createMcpExpressApp();
+
+  app.get('/.well-known/oauth-protected-resource/mcp', (_req, res) => {
+    res.status(200).json({ resource: publicMcpUrl, bearer_methods_supported: ['header'] });
+  });
+
+  app.all('/mcp', (req, res, next) => {
+    if (authorized(req.headers.authorization, bridgeToken)) {
+      next();
+      return;
+    }
+    res.set('www-authenticate', `Bearer resource_metadata="${publicMcpUrl.replace(/\/mcp$/, '/.well-known/oauth-protected-resource/mcp')}"`);
+    res.status(401).json({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: 'Authentication required' },
+      id: null,
+    });
+  });
 
   app.post('/mcp', async (req, res) => {
     const server = buildServer();

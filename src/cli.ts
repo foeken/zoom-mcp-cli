@@ -5,6 +5,7 @@ import { deleteMeetingCommand } from './commands/delete-meeting.js';
 import { getMeetingCommand } from './commands/get-meeting.js';
 import { importChromeCommand } from './commands/import-chrome.js';
 import { loginCommand } from './commands/login.js';
+import { listMeetingsCommand } from './commands/list-meetings.js';
 import { logoutCommand } from './commands/logout.js';
 import { pmiCommand } from './commands/pmi.js';
 import { serveCommand } from './commands/serve.js';
@@ -25,6 +26,7 @@ program.addCommand(statusCommand);
 program.addCommand(logoutCommand);
 
 // Meetings (clippy-style kebab names + short aliases)
+program.addCommand(listMeetingsCommand);
 program.addCommand(createMeetingCommand);
 program.addCommand(getMeetingCommand);
 program.addCommand(updateMeetingCommand);

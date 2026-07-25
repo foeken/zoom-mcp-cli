@@ -17,6 +17,28 @@ export interface MeetingResult {
   muid?: string | null;
 }
 
+export interface ListedMeeting {
+  meeting_id: string;
+  topic: string | null;
+  start_date: string | null;
+  start_time: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  duration_minutes: number | null;
+  meeting_type: number | null;
+  status: number | null;
+  manage_url: string;
+}
+
+export interface MeetingListResult {
+  list_type: 'upcoming' | 'previous';
+  page: number;
+  page_size: number;
+  total_records: number;
+  date_range: { from: string; to: string };
+  meetings: ListedMeeting[];
+}
+
 type Json = Record<string, unknown>;
 
 function fieldValue(meeting: Json, name: string): unknown {
@@ -25,6 +47,28 @@ function fieldValue(meeting: Json, name: string): unknown {
     return (node as Json).value;
   }
   return null;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function shiftMonth(date: string, amount: number): string {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) throw new ZoomError(`Invalid Zoom portal date: ${date}`);
+  parsed.setUTCMonth(parsed.getUTCMonth() + amount);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function validDate(value: string, label: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(new Date(`${value}T12:00:00Z`).getTime())) {
+    throw new ZoomError(`${label} must be YYYY-MM-DD.`);
+  }
+  return value;
 }
 
 function parseStart(options: {
@@ -218,6 +262,21 @@ export class ZoomClient {
     }
   }
 
+  private async meetingListContext(): Promise<{ userId: string; currentDate: string }> {
+    const res = await this.request('GET', '/meeting', {
+      accept: 'text/html',
+      headers: { Referer: this.baseUrl },
+    });
+    if (res.url.toLowerCase().includes('signin')) {
+      throw new ZoomError(`Not logged in (redirected to sign-in). Run: zoom login\nURL: ${res.url}`);
+    }
+    const html = await res.text();
+    const userId = html.match(/userId:\s*["'`]([^"'`]+)["'`]/)?.[1];
+    const currentDate = html.match(/login_user_current_time:\s*["'`](\d{4}-\d{2}-\d{2})["'`]/)?.[1];
+    if (!userId || !currentDate) throw new ZoomError('Could not read meeting-list context from the Zoom portal.');
+    return { userId, currentDate: validDate(currentDate, 'Zoom portal date') };
+  }
+
   private assertOk(data: Json, action: string): Json {
     if (!data.status) {
       throw new ZoomError(
@@ -336,6 +395,83 @@ export class ZoomClient {
       timezone: fieldValue(meeting, 'timezone'),
       join_url: joinUrl,
       manage_url: `${this.baseUrl}/meeting/${meetingId}`,
+    };
+  }
+
+  async listMeetings(options?: {
+    listType?: 'upcoming' | 'previous';
+    page?: number;
+    pageSize?: number;
+    from?: string;
+    to?: string;
+  }): Promise<MeetingListResult> {
+    await this.warm();
+    const listType = options?.listType ?? 'upcoming';
+    if (listType !== 'upcoming' && listType !== 'previous') {
+      throw new ZoomError('listType must be upcoming or previous.');
+    }
+    const page = options?.page ?? 1;
+    const pageSize = options?.pageSize ?? 15;
+    if (!Number.isInteger(page) || page < 1) throw new ZoomError('page must be a positive integer.');
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) {
+      throw new ZoomError('pageSize must be an integer from 1 to 100.');
+    }
+
+    const { userId, currentDate } = await this.meetingListContext();
+    const defaultFrom = listType === 'upcoming' ? currentDate : shiftMonth(currentDate, -3);
+    const defaultTo = listType === 'upcoming' ? shiftMonth(currentDate, 3) : currentDate;
+    const from = validDate(options?.from ?? defaultFrom, 'from');
+    const to = validDate(options?.to ?? defaultTo, 'to');
+    if (from > to) throw new ZoomError('from must be on or before to.');
+
+    const res = await this.request('POST', '/rest/meeting/list', {
+      body: {
+        listType,
+        page: String(page),
+        pageSize: String(pageSize),
+        hostId: '',
+        dateDuration: `${from},${to}`,
+        isShowPAC: 'false',
+        userId,
+        fromES: 'undefined',
+      },
+      headers: { Referer: `${this.baseUrl}/meeting` },
+    });
+    const data = this.assertOk((await res.json()) as Json, 'list_meetings');
+    const result = (data.result ?? {}) as Json;
+    const grouped = Array.isArray(result.meetings) ? result.meetings : [];
+    const rawMeetings = grouped.flatMap((group) => {
+      if (group && typeof group === 'object' && Array.isArray((group as Json).list)) {
+        return (group as Json).list as Json[];
+      }
+      return group && typeof group === 'object' ? [group as Json] : [];
+    });
+    const meetings = rawMeetings
+      .map((meeting): ListedMeeting | null => {
+        const meetingId = stringValue(meeting.number) ?? stringValue(meeting.numberF);
+        if (!meetingId) return null;
+        return {
+          meeting_id: meetingId,
+          topic: stringValue(meeting.topic),
+          start_date: stringValue(meeting.schDate),
+          start_time: stringValue(meeting.schTimeF),
+          starts_at: stringValue(meeting.scheduleStartTime),
+          ends_at: stringValue(meeting.scheduleEndTime),
+          duration_minutes: numberValue(meeting.duration),
+          meeting_type: numberValue(meeting.type),
+          status: numberValue(meeting.status),
+          manage_url: `${this.baseUrl}/meeting/${meetingId}`,
+        };
+      })
+      .filter((meeting): meeting is ListedMeeting => meeting !== null);
+
+    return {
+      list_type: listType,
+      page,
+      page_size: pageSize,
+      total_records: numberValue(result.totalRecords) ?? meetings.length,
+      date_range: { from, to },
+      meetings,
     };
   }
 
