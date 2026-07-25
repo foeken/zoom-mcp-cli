@@ -19,6 +19,10 @@ cookies.json
 **/*secret*
 **/*credential*
 
+# Machine-specific deployment launchers belong outside the repository.
+/start-zoom-mcp.sh
+*.local.sh
+
 # python leftovers
 .venv/
 __pycache__/
