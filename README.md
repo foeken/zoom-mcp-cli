@@ -9,7 +9,8 @@ No Zoom Marketplace app. Auth is a **web portal session** stored on device.
 ## Installation
 
 ```bash
-cd ~/Code/zoom-mcp
+git clone https://github.com/<owner>/zoom-mcp-cli.git
+cd zoom-mcp-cli
 bun install
 
 # Optional: browsers for `zoom login`
@@ -90,13 +91,18 @@ zoom serve
 ```toml
 [mcp_servers.zoom]
 url = "http://127.0.0.1:8765/mcp"
+bearer_token_env_var = "ZOOM_MCP_BRIDGE_TOKEN"
 ```
 
-Start the server before Codex:
+The HTTP server always requires a bearer token. Set it through your shell, service manager, or secret manager—never commit its value or a machine-specific launch script:
 
 ```bash
-bun run --cwd ~/Code/zoom-mcp src/cli.ts serve
+export ZOOM_MCP_BRIDGE_TOKEN="replace-with-your-secret"
+export ZOOM_MCP_PUBLIC_URL="http://127.0.0.1:8765/mcp"
+zoom serve
 ```
+
+For remote access, keep the server loopback-only and configure your own authenticated reverse proxy. Do not copy another machine's paths, hostname, Keychain references, or service files.
 
 ### MCP tools
 
