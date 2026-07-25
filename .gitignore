@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+*.tsbuildinfo
+
+# env / secrets (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# local session / cookies (live outside the repo by default; still ignore if present)
+cookies.json
+**/cookies.json
+.zoom_token
+**/*secret*
+**/*credential*
+
+# python leftovers
+.venv/
+__pycache__/
+*.egg-info/
+*.pyc
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~

@@ -1,0 +1,36 @@
+{
+  "name": "zoom-mcp-cli",
+  "version": "0.2.0",
+  "description": "CLI and HTTP MCP for Zoom meetings using portal session cookies",
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "zoom": "src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "serve": "bun run src/cli.ts serve",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@steipete/sweet-cookie": "^0.1.0",
+    "commander": "^12.0.0",
+    "express": "^5.1.0",
+    "playwright": "^1.49.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/express": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/foeken/zoom-mcp-cli.git"
+  },
+  "homepage": "https://github.com/foeken/zoom-mcp-cli",
+  "bugs": {
+    "url": "https://github.com/foeken/zoom-mcp-cli/issues"
+  }
+}
