@@ -63,6 +63,8 @@ zoom create "1:1" --start "2026-07-25 15:00" --duration 45   # alias
 zoom create-meeting "Call" --in 15 --json
 
 # Read / update / delete
+zoom list-meetings
+zoom list-meetings --type previous --page-size 50
 zoom get-meeting 12345678901
 zoom update-meeting 12345678901 --topic "New title" --duration 60
 zoom delete-meeting 12345678901
@@ -99,7 +101,7 @@ bun run --cwd ~/Code/zoom-mcp src/cli.ts serve
 ### MCP tools
 
 `login`, `import_chrome_session`, `session_status`, `logout`,  
-`create_meeting`, `update_meeting`, `delete_meeting`, `get_meeting`, `get_personal_meeting`
+`list_meetings`, `create_meeting`, `update_meeting`, `delete_meeting`, `get_meeting`, `get_personal_meeting`
 
 ---
 
@@ -111,6 +113,8 @@ bun run --cwd ~/Code/zoom-mcp src/cli.ts serve
 | `ZOOM_TIMEZONE` | `UTC` |
 | `ZOOM_MCP_HOST` | `127.0.0.1` |
 | `ZOOM_MCP_PORT` | `8765` |
+| `ZOOM_MCP_BRIDGE_TOKEN` | required for `zoom serve`; bearer token for `/mcp` |
+| `ZOOM_MCP_PUBLIC_URL` | public MCP URL used in bearer metadata |
 | `ZOOM_MCP_COOKIE_STORE` | `~/.config/zoom-mcp/cookies.json` |
 | `ZOOM_LOGIN_TIMEOUT_SEC` | `300` |
 
